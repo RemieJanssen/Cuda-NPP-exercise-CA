@@ -1,0 +1,8 @@
+name: cuda
+channels:
+  - conda-forge
+  - nvidia
+dependencies:
+  - cuda
+  - libnpp
+  - freeimage
