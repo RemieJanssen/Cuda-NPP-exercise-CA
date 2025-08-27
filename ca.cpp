@@ -38,7 +38,7 @@
 
 #include <cuda_runtime.h>
 #include <npp.h>
-#include <nppi.h>
+// #include <nppi.h>
 
 #include <helper_cuda.h>
 #include <helper_string.h>
