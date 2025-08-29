@@ -13,5 +13,5 @@ Then build the code with nvcc. (I run and build the code on an LSF compute clust
 ```
 Run on the compute cluster with
 ```
-  bsub -q bio-gpu-m10 -o cl.out -e cl.err "./ca > ca.out 2> ca.err"
+  bsub -q bio-gpu-m10 -o cl.out -e cl.err "./ca --input ./examples/5.2.10.tiff > ca.out 2> ca.err"
 ```
