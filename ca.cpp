@@ -143,30 +143,6 @@ int main(int argc, char *argv[])
       sResultFilename = outputFilePath;
     }
 
-    // declare a host image object for an 8-bit grayscale image
-    npp::ImageCPU_8u_C1 oHostSrc;
-    // load gray-scale image from disk
-    npp::loadImage(sFilename, oHostSrc);
-    // declare a device image and copy construct from the host image,
-    // i.e. upload host to device
-    npp::ImageNPP_8u_C1 oDeviceSrc(oHostSrc);
-
-    // create struct with box-filter mask size
-    NppiSize oMaskSize = {5, 5};
-
-    NppiSize oSrcSize = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
-    NppiPoint oSrcOffset = {0, 0};
-
-    // create struct with ROI size
-    NppiSize oSizeROI = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
-    // allocate device image of appropriately reduced size
-    npp::ImageNPP_8u_C1 oDeviceDst(oSizeROI.width, oSizeROI.height);
-    // set anchor point inside the mask to (oMaskSize.width / 2,
-    // oMaskSize.height / 2) It should round down when odd
-    NppiPoint oAnchor = {oMaskSize.width / 2, oMaskSize.height / 2};
-
-
-
     NppStreamContext ctx = {0};
 
     // Device ophalen (meestal device 0)
@@ -186,10 +162,51 @@ int main(int argc, char *argv[])
     ctx.nMaxThreadsPerBlock     = prop.maxThreadsPerBlock;
     ctx.nSharedMemPerBlock      = prop.sharedMemPerBlock;
 
+
+
+
+
+    // declare a host image object for an 8-bit grayscale image
+    npp::ImageCPU_8u_C1 oHostSrc;
+    // load gray-scale image from disk
+    npp::loadImage(sFilename, oHostSrc);
+    // declare a device image and copy construct from the host image,
+    // i.e. upload host to device
+    npp::ImageNPP_8u_C1 oDeviceSrc(oHostSrc);
+
+
+    int masksize_x = 3;
+    int masksize_y = 1;
+    // create struct with box-filter mask size
+    NppiSize oMaskSize = {masksize_x, masksize_y};
+
+    NppiSize oSrcSize = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
+    NppiPoint oSrcOffset = {0, 0};
+
+    // create struct with ROI size
+    NppiSize oSizeROI = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
+    // allocate device image of appropriately reduced size
+    npp::ImageNPP_8u_C1 oDeviceDst(oSizeROI.width, oSizeROI.height);
+    // set anchor point inside the mask to (oMaskSize.width / 2,
+    // oMaskSize.height / 2) It should round down when odd
+    NppiPoint oAnchor = {oMaskSize.width / 2, oMaskSize.height / 2};
+
+
+    npp::ImageCPU_32s_C1 hostKernel(masksize_x,masksize_y);
+    for(int x = 0 ; x < masksize_x; x++){
+        for(int y = 0 ; y < masksize_y; y++){
+            hostKernel.pixels(x,y)[0].x = 0;
+        }
+    }
+    hostKernel.pixels(0,0)[0].x = 2;
+    hostKernel.pixels(1,0)[0].x = -1;
+    hostKernel.pixels(2,0)[0].x = -1;
+    npp::ImageNPP_32s_C1 pKernel(hostKernel);
+
     // run box filter
-    NPP_CHECK_NPP(nppiFilterBoxBorder_8u_C1R_Ctx(
-        oDeviceSrc.data(), oDeviceSrc.pitch(), oSrcSize, oSrcOffset,
-        oDeviceDst.data(), oDeviceDst.pitch(), oSizeROI, oMaskSize, oAnchor,
+    NPP_CHECK_NPP(nppiFilter_8u_C1R_Ctx(
+        oDeviceSrc.data(), oDeviceSrc.pitch(), oDeviceDst.data(), oDeviceDst.pitch(),
+        oSizeROI, pKernel.data(), oMaskSize, oAnchor,
         NPP_BORDER_REPLICATE, ctx));
 
     // declare a host image for the result
