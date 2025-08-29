@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-      filePath = sdkFindFilePath("Lena.pgm", argv[0]);
+      filePath = sdkFindFilePath("examples/5.2.10.tiff", argv[0]);
     }
 
     if (filePath)
@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-      sFilename = "Lena.pgm";
+      sFilename = "examples/5.2.10.tiff";
     }
 
     // if we specify the filename at the command line, then we only test
