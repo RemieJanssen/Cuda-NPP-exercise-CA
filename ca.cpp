@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
 
 
     int masksize_x = 3;
-    int masksize_y = 1;
+    int masksize_y = 3;
     // create struct with box-filter mask size
     NppiSize oMaskSize = {masksize_x, masksize_y};
 
@@ -221,7 +221,42 @@ int main(int argc, char *argv[])
         oSizeROI, 0, ctx));
 
     // Do something fun with CAs
-    // e.g. Module sum of neighbours
+    // e.g. Module sum of neighbors
+    npp::ImageCPU_32s_C1 hostKernel(masksize_x,masksize_y);
+    for(int x = 0 ; x < masksize_x; x++){
+        for(int y = 0 ; y < masksize_y; y++){
+            hostKernel.pixels(x,y)[0].x = 0;
+        }
+    }
+    hostKernel.pixels(1,0)[0].x = 1;
+    hostKernel.pixels(0,1)[0].x = 1;
+    hostKernel.pixels(1,1)[0].x = 1;
+    hostKernel.pixels(2,1)[0].x = 1;
+    hostKernel.pixels(1,2)[0].x = 1;
+    npp::ImageNPP_32s_C1 pKernel(hostKernel);
+
+    cudaDeviceSynchronize();
+    std::swap(pSrc, pDst);
+    // sum neighbors
+    NPP_CHECK_NPP(nppiFilter_8u_C1R_Ctx(
+        pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
+        oSizeROI, pKernel.data(), oMaskSize, oAnchor,
+        1, ctx));
+    // // get divisor times number of states and set in dst
+    std::swap(pSrc, pDst);
+    cudaDeviceSynchronize();
+    NPP_CHECK_NPP(nppiDivC_8u_C1RSfs_Ctx(
+        pSrc->data(), pSrc->pitch(), states, pDst->data(), pDst->pitch(),
+        oSizeROI, 0, ctx));
+    cudaDeviceSynchronize();
+    NPP_CHECK_NPP(nppiMulC_8u_C1RSfs_Ctx(
+        pDst->data(), pDst->pitch(), states, pDst->data(), pDst->pitch(),
+        oSizeROI, 0, ctx));
+    // get the modulus by subtracting divisor times number of states
+    cudaDeviceSynchronize();
+    NPP_CHECK_NPP(nppiSub_8u_C1RSfs_Ctx(
+        pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
+        pDst->data(), pDst->pitch(), oSizeROI, 0, ctx));
 
 
     // convert back to the full range of colours
@@ -233,22 +268,6 @@ int main(int argc, char *argv[])
     cudaDeviceSynchronize();
     // std::swap(pSrc, pDst);
 
-    // npp::ImageCPU_32s_C1 hostKernel(masksize_x,masksize_y);
-    // for(int x = 0 ; x < masksize_x; x++){
-    //     for(int y = 0 ; y < masksize_y; y++){
-    //         hostKernel.pixels(x,y)[0].x = 0;
-    //     }
-    // }
-    // hostKernel.pixels(0,0)[0].x = 2;
-    // hostKernel.pixels(1,0)[0].x = -1;
-    // hostKernel.pixels(2,0)[0].x = -1;
-    // npp::ImageNPP_32s_C1 pKernel(hostKernel);
-
-    // // run box filter
-    // NPP_CHECK_NPP(nppiFilter_8u_C1R_Ctx(
-    //     pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
-    //     oSizeROI, pKernel.data(), oMaskSize, oAnchor,
-    //     NPP_BORDER_REPLICATE, ctx));
 
     // declare a host image for the result
     npp::ImageCPU_8u_C1 oHostDst(pDst->size());
