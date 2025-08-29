@@ -120,7 +120,7 @@ namespace npp
 
         // now save the result image
         bool bSuccess;
-        bSuccess = FreeImage_Save(FIF_PGM, pResultBitmap, rFileName.c_str(), 0) == TRUE;
+        bSuccess = FreeImage_Save(FIF_PNG, pResultBitmap, rFileName.c_str(), 0) == TRUE;
         NPP_ASSERT_MSG(bSuccess, "Failed to save result image.");
     }
 

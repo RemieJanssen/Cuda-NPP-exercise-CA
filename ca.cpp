@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
       sResultFilename = sResultFilename.substr(0, dot);
     }
 
-    sResultFilename += "_boxFilter.pgm";
+    sResultFilename += ".out.png";
 
     if (checkCmdLineFlag(argc, (const char **)argv, "output"))
     {
