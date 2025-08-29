@@ -90,6 +90,20 @@ int main(int argc, char *argv[])
       filePath = sdkFindFilePath("examples/5.2.10.tiff", argv[0]);
     }
 
+    int states;
+    if (checkCmdLineFlag(argc, (const char **)argv, "states"))
+    {
+      char *states_str;
+      getCmdLineArgumentString(argc, (const char **)argv, "states", &states_str);
+      states = std::stoi(states_str);
+    }
+    else
+    {
+      states = 4;
+    }
+    std::cout << "states: " << states << "\n";
+
+
     if (filePath)
     {
       sFilename = filePath;
@@ -175,13 +189,14 @@ int main(int argc, char *argv[])
     npp::ImageNPP_8u_C1 oDeviceSrc(oHostSrc);
 
 
+
     int masksize_x = 3;
     int masksize_y = 1;
     // create struct with box-filter mask size
     NppiSize oMaskSize = {masksize_x, masksize_y};
 
-    NppiSize oSrcSize = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
     NppiPoint oSrcOffset = {0, 0};
+
 
     // create struct with ROI size
     NppiSize oSizeROI = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
@@ -191,28 +206,54 @@ int main(int argc, char *argv[])
     // oMaskSize.height / 2) It should round down when odd
     NppiPoint oAnchor = {oMaskSize.width / 2, oMaskSize.height / 2};
 
+    NppiSize oSrcSize = {(int)oDeviceSrc.width(), (int)oDeviceSrc.height()};
 
-    npp::ImageCPU_32s_C1 hostKernel(masksize_x,masksize_y);
-    for(int x = 0 ; x < masksize_x; x++){
-        for(int y = 0 ; y < masksize_y; y++){
-            hostKernel.pixels(x,y)[0].x = 0;
-        }
-    }
-    hostKernel.pixels(0,0)[0].x = 2;
-    hostKernel.pixels(1,0)[0].x = -1;
-    hostKernel.pixels(2,0)[0].x = -1;
-    npp::ImageNPP_32s_C1 pKernel(hostKernel);
 
-    // run box filter
-    NPP_CHECK_NPP(nppiFilter_8u_C1R_Ctx(
-        oDeviceSrc.data(), oDeviceSrc.pitch(), oDeviceDst.data(), oDeviceDst.pitch(),
-        oSizeROI, pKernel.data(), oMaskSize, oAnchor,
-        NPP_BORDER_REPLICATE, ctx));
+    npp::ImageNPP_8u_C1 *pSrc = &oDeviceSrc ;
+    npp::ImageNPP_8u_C1 *pDst = &oDeviceDst ;
+
+    // discretize image
+    int no_of_values = states;
+    int total_number_of_values = (1 << 8) ;
+    cudaDeviceSynchronize();
+    NPP_CHECK_NPP(nppiDivC_8u_C1RSfs_Ctx(
+        pSrc->data(), pSrc->pitch(), total_number_of_values/(no_of_values-1), pDst->data(), pDst->pitch(),
+        oSizeROI, 0, ctx));
+
+    // Do something fun with CAs
+    // e.g. Module sum of neighbours
+
+
+    // convert back to the full range of colours
+    cudaDeviceSynchronize();
+    std::swap(pSrc, pDst);
+    NPP_CHECK_NPP(nppiMulC_8u_C1RSfs_Ctx(
+        pSrc->data(), pSrc->pitch(), total_number_of_values/(no_of_values-1), pDst->data(), pDst->pitch(),
+        oSizeROI, 0, ctx));
+    cudaDeviceSynchronize();
+    // std::swap(pSrc, pDst);
+
+    // npp::ImageCPU_32s_C1 hostKernel(masksize_x,masksize_y);
+    // for(int x = 0 ; x < masksize_x; x++){
+    //     for(int y = 0 ; y < masksize_y; y++){
+    //         hostKernel.pixels(x,y)[0].x = 0;
+    //     }
+    // }
+    // hostKernel.pixels(0,0)[0].x = 2;
+    // hostKernel.pixels(1,0)[0].x = -1;
+    // hostKernel.pixels(2,0)[0].x = -1;
+    // npp::ImageNPP_32s_C1 pKernel(hostKernel);
+
+    // // run box filter
+    // NPP_CHECK_NPP(nppiFilter_8u_C1R_Ctx(
+    //     pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
+    //     oSizeROI, pKernel.data(), oMaskSize, oAnchor,
+    //     NPP_BORDER_REPLICATE, ctx));
 
     // declare a host image for the result
-    npp::ImageCPU_8u_C1 oHostDst(oDeviceDst.size());
+    npp::ImageCPU_8u_C1 oHostDst(pDst->size());
     // and copy the device result data into it
-    oDeviceDst.copyTo(oHostDst.data(), oHostDst.pitch());
+    pDst->copyTo(oHostDst.data(), oHostDst.pitch());
 
     saveImage(sResultFilename, oHostDst);
     std::cout << "Saved image: " << sResultFilename << std::endl;
