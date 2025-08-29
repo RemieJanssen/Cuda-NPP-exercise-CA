@@ -5,9 +5,9 @@ The code reads an image, reduces the number of colours, and then executes a numb
 
 ## Build
 Create and activate the cuda conda environment in `envs/cuda.source.yaml`.
-Then build the code with nvcc.
+Then build the code with nvcc. (I run and build the code on an LSF compute cluster, hence the bsub command)
 ```
   conda env update -f ./envs/cuda.source.yaml
   conda activate cuda
-  nvcc ca.cpp -I$CONDA_PREFIX/targets/x86_64-linux/include -I./utils -I./utils/UtilNPP -L$CONDA_PREFIX/targets/x86_64-linux/lib -L$CONDA_PREFIX/lib -lfreeimage -lnppc -lnppial -lnppicc -lnppif -lnppig -lnppim -lnppist -lnppisu -lnppitc -lnpps -o ca
+  bsub -q bio-gpu-m10 "nvcc ca.cpp -I/usr/local/cuda-12.9/targets/x86_64-linux/include -I./utils -I./utils/UtilNPP -L/usr/local/cuda-12.9/targets/x86_64-linux/lib -L$CONDA_PREFIX/lib -lfreeimage -lnppc -lnppial -lnppicc -lnppif -lnppig -lnppim -lnppist -lnppisu -lnppitc -lnpps -o ca"
 ```

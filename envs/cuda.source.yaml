@@ -3,6 +3,6 @@ channels:
   - conda-forge
   - nvidia
 dependencies:
-  - cuda
+  - cuda<=12.9
   - libnpp
   - freeimage
