@@ -11,3 +11,7 @@ Then build the code with nvcc. (I run and build the code on an LSF compute clust
   conda activate cuda
   bsub -q bio-gpu-m10 "nvcc ca.cpp -I/usr/local/cuda-12.9/targets/x86_64-linux/include -I./utils -I./utils/UtilNPP -L/usr/local/cuda-12.9/targets/x86_64-linux/lib -L$CONDA_PREFIX/lib -lfreeimage -lnppc -lnppial -lnppicc -lnppif -lnppig -lnppim -lnppist -lnppisu -lnppitc -lnpps -o ca"
 ```
+Run on the compute cluster with
+```
+  bsub -q bio-gpu-m10 -o cl.out -e cl.err "./ca > ca.out 2> ca.err"
+```
