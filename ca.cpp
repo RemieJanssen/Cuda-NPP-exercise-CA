@@ -90,18 +90,18 @@ int main(int argc, char *argv[])
       filePath = sdkFindFilePath("examples/5.2.10.tiff", argv[0]);
     }
 
-    int states;
-    if (checkCmdLineFlag(argc, (const char **)argv, "states"))
+    int steps;
+    if (checkCmdLineFlag(argc, (const char **)argv, "steps"))
     {
-      char *states_str;
-      getCmdLineArgumentString(argc, (const char **)argv, "states", &states_str);
-      states = std::stoi(states_str);
+      char *steps_str;
+      getCmdLineArgumentString(argc, (const char **)argv, "steps", &steps_str);
+      steps = std::stoi(steps_str);
     }
     else
     {
-      states = 4;
+      steps = 1;
     }
-    std::cout << "states: " << states << "\n";
+    std::cout << "steps: " << steps << "\n";
 
 
     if (filePath)
@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
     // create struct with box-filter mask size
     NppiSize oMaskSize = {masksize_x, masksize_y};
 
-    NppiPoint oSrcOffset = {0, 0};
+    NppiPoint oSrcOffset = {1, 1};
 
 
     // create struct with ROI size
@@ -213,51 +213,51 @@ int main(int argc, char *argv[])
     npp::ImageNPP_8u_C1 *pDst = &oDeviceDst ;
 
     // discretize image
-    int no_of_values = states;
-    int total_number_of_values = (1 << 8) ;
+    int no_of_values = 2;
+    int total_number_of_values = NPP_MAX_8U ;
     cudaDeviceSynchronize();
     NPP_CHECK_NPP(nppiDivC_8u_C1RSfs_Ctx(
         pSrc->data(), pSrc->pitch(), total_number_of_values/(no_of_values-1), pDst->data(), pDst->pitch(),
         oSizeROI, 0, ctx));
 
     // Do something fun with CAs
-    // e.g. Module sum of neighbors
+    // e.g. Game of life
     npp::ImageCPU_32s_C1 hostKernel(masksize_x,masksize_y);
     for(int x = 0 ; x < masksize_x; x++){
         for(int y = 0 ; y < masksize_y; y++){
-            hostKernel.pixels(x,y)[0].x = 0;
+            hostKernel.pixels(x,y)[0].x = 2;
         }
     }
-    hostKernel.pixels(1,0)[0].x = 1;
-    hostKernel.pixels(0,1)[0].x = 1;
     hostKernel.pixels(1,1)[0].x = 1;
-    hostKernel.pixels(2,1)[0].x = 1;
-    hostKernel.pixels(1,2)[0].x = 1;
     npp::ImageNPP_32s_C1 pKernel(hostKernel);
 
-    cudaDeviceSynchronize();
-    std::swap(pSrc, pDst);
-    // sum neighbors
-    NPP_CHECK_NPP(nppiFilter_8u_C1R_Ctx(
-        pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
-        oSizeROI, pKernel.data(), oMaskSize, oAnchor,
-        1, ctx));
-    // // get divisor times number of states and set in dst
-    std::swap(pSrc, pDst);
-    cudaDeviceSynchronize();
-    NPP_CHECK_NPP(nppiDivC_8u_C1RSfs_Ctx(
-        pSrc->data(), pSrc->pitch(), states, pDst->data(), pDst->pitch(),
-        oSizeROI, 0, ctx));
-    cudaDeviceSynchronize();
-    NPP_CHECK_NPP(nppiMulC_8u_C1RSfs_Ctx(
-        pDst->data(), pDst->pitch(), states, pDst->data(), pDst->pitch(),
-        oSizeROI, 0, ctx));
-    // get the modulus by subtracting divisor times number of states
-    cudaDeviceSynchronize();
-    NPP_CHECK_NPP(nppiSub_8u_C1RSfs_Ctx(
-        pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
-        pDst->data(), pDst->pitch(), oSizeROI, 0, ctx));
-
+    for ( int step = 0; step < steps ; step ++){
+        cudaDeviceSynchronize();
+        std::swap(pSrc, pDst);
+        // sum neighbors
+        NPP_CHECK_NPP(nppiFilter_8u_C1R_Ctx(
+            pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
+            oSizeROI, pKernel.data(), oMaskSize, oAnchor,
+            1, ctx));
+        // check if 5<=value<=7 amd
+        // compare operations set to NPP_MAX_8U if True
+        cudaDeviceSynchronize();
+        std::swap(pSrc, pDst);
+        NPP_CHECK_NPP(nppiCompareC_8u_C1R_Ctx(
+            pSrc->data(), pSrc->pitch(), 5, pDst->data(), pDst->pitch(),
+            oSizeROI, NPP_CMP_GREATER_EQ, ctx));
+        NPP_CHECK_NPP(nppiCompareC_8u_C1R_Ctx(
+            pSrc->data(), pSrc->pitch(), 7, pSrc->data(), pSrc->pitch(),
+            oSizeROI, NPP_CMP_LESS_EQ, ctx));
+        NPP_CHECK_NPP(nppiAnd_8u_C1R_Ctx(
+            pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
+            pDst->data(), pDst->pitch(), oSizeROI, ctx));
+        cudaDeviceSynchronize();
+        std::swap(pSrc, pDst);
+        NPP_CHECK_NPP(nppiDivC_8u_C1RSfs_Ctx(
+            pSrc->data(), pSrc->pitch(), NPP_MAX_8U, pDst->data(), pDst->pitch(),
+            oSizeROI, 0, ctx));
+    }
 
     // convert back to the full range of colours
     cudaDeviceSynchronize();
