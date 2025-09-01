@@ -15,3 +15,6 @@ Run on the compute cluster with
 ```
   bsub -q bio-gpu-m10 -o cl.out -e cl.err "./ca --input ./examples/5.2.10.tiff --steps 10 > ca.out 2> ca.err"
 ```
+
+## Example
+The example in the examples folder is from https://sipi.usc.edu/database/database.php?volume=misc&image=22#top
