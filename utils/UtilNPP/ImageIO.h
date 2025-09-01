@@ -92,6 +92,7 @@ namespace npp
             pSrcLine -= nSrcPitch;
             pDstLine += nDstPitch;
         }
+        std::cout << "pitch: " << oImage.pitch() << " width: " << oImage.width() << " height: " << oImage.height() << "\n";
 
         // swap the user given image with our result image, effecively
         // moving our newly loaded image data into the user provided shell

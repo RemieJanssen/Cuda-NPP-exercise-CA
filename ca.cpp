@@ -139,15 +139,17 @@ int main(int argc, char *argv[])
     }
 
     std::string sResultFilename = sFilename;
-
+    std::string sResultStepsPartialName= "";
     std::string::size_type dot = sResultFilename.rfind('.');
 
     if (dot != std::string::npos)
     {
       sResultFilename = sResultFilename.substr(0, dot);
+      sResultStepsPartialName = sResultFilename;
     }
 
     sResultFilename += ".out.png";
+    bool saveAllSteps = true;
 
     if (checkCmdLineFlag(argc, (const char **)argv, "output"))
     {
@@ -155,19 +157,20 @@ int main(int argc, char *argv[])
       getCmdLineArgumentString(argc, (const char **)argv, "output",
                                &outputFilePath);
       sResultFilename = outputFilePath;
+      saveAllSteps = false;
     }
 
     NppStreamContext ctx = {0};
 
-    // Device ophalen (meestal device 0)
+    // Get device
     int dev;
     cudaGetDevice(&dev);
     ctx.nCudaDeviceId = dev;
 
-    // Stream ophalen (vaak 0 voor de default stream)
+    // Get stream
     ctx.hStream = 0;
 
-    // Device properties ophalen
+    // Get device properties
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, dev);
 
@@ -219,26 +222,39 @@ int main(int argc, char *argv[])
     NPP_CHECK_NPP(nppiDivC_8u_C1RSfs_Ctx(
         pSrc->data(), pSrc->pitch(), total_number_of_values/(no_of_values-1), pDst->data(), pDst->pitch(),
         oSizeROI, 0, ctx));
+    cudaDeviceSynchronize();
+    std::swap(pSrc, pDst);
+    NPP_CHECK_NPP(nppiCompareC_8u_C1R_Ctx(
+        pSrc->data(), pSrc->pitch(), 1, pDst->data(), pDst->pitch(),
+        oSizeROI, NPP_CMP_GREATER_EQ, ctx));
 
     // Do something fun with CAs
     // e.g. Game of life
-    npp::ImageCPU_32s_C1 hostKernel(masksize_x,masksize_y);
-    for(int x = 0 ; x < masksize_x; x++){
-        for(int y = 0 ; y < masksize_y; y++){
-            hostKernel.pixels(x,y)[0].x = 2;
-        }
-    }
-    hostKernel.pixels(1,1)[0].x = 1;
-    npp::ImageNPP_32s_C1 pKernel(hostKernel);
+    // Due to limitations in NPP, the rule is encoded in one kernel and 2 comparisons
+    Npp32s hostKernel[3*3] = {
+      2,2,2,
+      2,1,2,
+      2,2,2
+    };
+    NppiSize oKernelSize = {3,3};
+
+    Npp32s* pKernel; //just a regular 1D array on the GPU
+    cudaMalloc((void**)&pKernel, masksize_x * masksize_y * sizeof(Npp32s));
+    cudaMemcpy(pKernel, hostKernel, masksize_x * masksize_y * sizeof(Npp32s), cudaMemcpyHostToDevice);
 
     for ( int step = 0; step < steps ; step ++){
+        cudaDeviceSynchronize();
+        std::swap(pSrc, pDst);
+        NPP_CHECK_NPP(nppiDivC_8u_C1RSfs_Ctx(
+            pSrc->data(), pSrc->pitch(), NPP_MAX_8U, pDst->data(), pDst->pitch(),
+            oSizeROI, 0, ctx));
         cudaDeviceSynchronize();
         std::swap(pSrc, pDst);
         // sum neighbors
         NPP_CHECK_NPP(nppiFilter_8u_C1R_Ctx(
             pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
-            oSizeROI, pKernel.data(), oMaskSize, oAnchor,
-            1, ctx));
+            oSizeROI, pKernel, oKernelSize, oAnchor, 1,
+            ctx));
         // check if 5<=value<=7 amd
         // compare operations set to NPP_MAX_8U if True
         cudaDeviceSynchronize();
@@ -246,29 +262,32 @@ int main(int argc, char *argv[])
         NPP_CHECK_NPP(nppiCompareC_8u_C1R_Ctx(
             pSrc->data(), pSrc->pitch(), 5, pDst->data(), pDst->pitch(),
             oSizeROI, NPP_CMP_GREATER_EQ, ctx));
+        cudaDeviceSynchronize();
         NPP_CHECK_NPP(nppiCompareC_8u_C1R_Ctx(
             pSrc->data(), pSrc->pitch(), 7, pSrc->data(), pSrc->pitch(),
             oSizeROI, NPP_CMP_LESS_EQ, ctx));
-        NPP_CHECK_NPP(nppiAnd_8u_C1R_Ctx(
-            pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
-            pDst->data(), pDst->pitch(), oSizeROI, ctx));
         cudaDeviceSynchronize();
-        std::swap(pSrc, pDst);
-        NPP_CHECK_NPP(nppiDivC_8u_C1RSfs_Ctx(
-            pSrc->data(), pSrc->pitch(), NPP_MAX_8U, pDst->data(), pDst->pitch(),
-            oSizeROI, 0, ctx));
+        NPP_CHECK_NPP(nppiAnd_8u_C1IR_Ctx(
+            pSrc->data(), pSrc->pitch(), pDst->data(), pDst->pitch(),
+            oSizeROI, ctx));
+
+        if (saveAllSteps){
+            std::string filename = sResultStepsPartialName + "_" + std::to_string(step) + ".out.png";
+            // declare a host image for the result
+            npp::ImageCPU_8u_C1 oHostDst(pDst->size());
+            // and copy the device result data into it
+            pDst->copyTo(oHostDst.data(), oHostDst.pitch());
+
+            saveImage(filename, oHostDst);
+            std::cout << "Saved image: " << filename << std::endl;
+
+          }
+
+
+
     }
 
-    // convert back to the full range of colours
     cudaDeviceSynchronize();
-    std::swap(pSrc, pDst);
-    NPP_CHECK_NPP(nppiMulC_8u_C1RSfs_Ctx(
-        pSrc->data(), pSrc->pitch(), total_number_of_values/(no_of_values-1), pDst->data(), pDst->pitch(),
-        oSizeROI, 0, ctx));
-    cudaDeviceSynchronize();
-    // std::swap(pSrc, pDst);
-
-
     // declare a host image for the result
     npp::ImageCPU_8u_C1 oHostDst(pDst->size());
     // and copy the device result data into it
